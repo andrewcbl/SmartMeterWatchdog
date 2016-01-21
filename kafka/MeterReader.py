@@ -6,12 +6,14 @@ import pandas as pd
 
 class MeterTracker(object):
 
-    def __init__(self, sHouseId, sDataDir, zipCode):
+    def __init__(self, sHouseId, houseId, sDataDir, zipCode):
         self.sHouseId = sHouseId
+        self.houseId = houseId
         self.sMeters = {}
         self.sDataDir = sDataDir
         self.meterDict = {}
         self.zipCode = zipCode
+        self.fileLength = 0
         self.readLabels()
 
     def fileLen(self, fname):
@@ -40,7 +42,10 @@ class MeterTracker(object):
 
         sourceData = self.sDataDir + 'house_' + str(self.sHouseId) + '/channel_' + str(meterId) + '.dat'
 
-        if lineNum > self.fileLen(sourceData):
+        if self.fileLength == 0:
+            self.fileLength = self.fileLen(sourceData)
+
+        if lineNum > self.fileLength:
             lineNum = 1
 
         curReading = linecache.getline(sourceData, lineNum)
@@ -50,7 +55,7 @@ class MeterTracker(object):
 
         msg = json.dumps({'timestamp': timestamp,
                           'zip': self.zipCode,
-                          'houseId': self.sHouseId,
+                          'houseId': self.houseId,
                           'meterId': meterId,
                           'label': self.meterDict[str(meterId)],
                           'power': reading})
@@ -74,7 +79,7 @@ class MeterLfReader(object):
         if houseId not in self.tracker.keys():
             sHouseId = random.randint(1, 6)
             zipCode = self.zipcode_db[random.randint(0, self.zipcode_cnt - 1)]
-            meterTracker = MeterTracker(sHouseId, self.dataDir, zipCode)
+            meterTracker = MeterTracker(sHouseId, houseId, self.dataDir, zipCode)
             self.tracker[houseId] = meterTracker
             self.tracker[houseId].getRecord()
 
