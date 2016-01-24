@@ -26,7 +26,7 @@ class KafkaLfProducer(object):
             if msg_cnt % 100 == 0:
                 print msg, msg_cnt
 
-            self.producer.send_messages('smw_low_freq4', source_symbol, msg)
+            self.producer.send_messages('smw_low_freq6', source_symbol, msg)
             msg_cnt += 1
 
 if __name__ == "__main__":
