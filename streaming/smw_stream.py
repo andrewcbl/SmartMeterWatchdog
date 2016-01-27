@@ -11,13 +11,26 @@ from pyspark.sql.types import *
 
 from cassandra.cluster import Cluster
 
+from tdigest import TDigest
+import rethinkdb as r
+
 import time
 import json
+
+# Rethink db connection parameters
+rdb_dns    = "ec2-52-89-146-18.us-west-2.compute.amazonaws.com"
+rdb_port   = 28015
+
+# Kafka streaming connection parameters
+kafka_dns  = "ec2-52-35-74-206.us-west-2.compute.amazonaws.com"
+kafka_port = "2181"
 
 sc = SparkContext(appName="StreamingKafkaLowFrequency")
 ssc = StreamingContext(sc, 1)
 sqlContext = SQLContext(sc)
 
+def connectRethinkDb():
+    r.connect(host=rdb_dns, port=rdb_port, db="test").repl()
 
 def getSqlContextInstance(sparkContext):
     if ('sqlContextSingletonInstance' not in globals()):
@@ -38,7 +51,28 @@ def process(rdd):
         "power": x[1]
     })
     house_clean_df = sqlContext.createDataFrame(house_clean)
-    house_clean_df.foreachPartition(aggToCassandra)
+#    house_clean_df.foreachPartition(aggToCassandra)
+    house_clean_df.foreachPartition(aggToRethinkdb)
+
+def updateRecord(rec):
+    try:
+        conn = r.connect(host=rdb_dns, port=rdb_port, db="test")
+    except RqlDriverError:
+        abort(503, "No database connection could be established.")
+
+    r.table("power_rt1").insert([{
+        "houseId:": str(rec[0]),
+        "date:": str(rec[1]),
+        "zip:": str(rec[2]),
+        "power": str(rec[3])
+    }]).run(conn)
+
+    conn.close()
+
+def aggToRethinkdb(agg):
+    if agg:
+        for rec in agg:
+            updateRecord(rec)
 
 def aggToCassandra(agg):
     if agg:
@@ -49,7 +83,9 @@ def aggToCassandra(agg):
         casSession.shutdown()
         cascluster.shutdown()
 
-kafkaStream = KafkaUtils.createStream(ssc, "ec2-52-35-74-206.us-west-2.compute.amazonaws.com:2181", "smw_streaming", {"smw_low_freq7": 1})
+# connectRethinkDb()
+
+kafkaStream = KafkaUtils.createStream(ssc, kafka_dns + ":" + kafka_port, "smw_streaming", {"smw_low_freq8": 1})
 power_rt = kafkaStream.map(lambda rec: rec[1])
 
 power_rt.foreachRDD(process)
