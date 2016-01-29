@@ -21,12 +21,12 @@ class KafkaLfProducer(object):
         msg_cnt = 0
 
         while True:
-            msg = self.meterReader.getRecord()
+            (isLf, msg) = self.meterReader.getRecord()
 
-            if msg_cnt % 100 == 0:
-                print msg, msg_cnt
+#            if msg_cnt % 100 == 0:
+            print msg, msg_cnt, isLf
 
-            self.producer.send_messages('smw_low_freq6', source_symbol, msg)
+#            self.producer.send_messages('smw_low_freq6', source_symbol, msg)
             msg_cnt += 1
 
 if __name__ == "__main__":
