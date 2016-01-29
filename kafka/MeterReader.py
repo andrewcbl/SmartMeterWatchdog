@@ -21,9 +21,12 @@ class MeterTracker(object):
         self.houseConfig = houseConfig;
         self.sMeters    = {}
         self.meterDict  = meterDict
-        self.fileLength = 0
         self.hfTimestamp = None
         self.lfTimestamp = None
+        self.hfDone = False
+        self.lfDone = False
+        self.hfLine = 1
+        self.lfLine = 1
 
     def getRecordAgg(self, dataDir, houseId, lineNum, startChannel, endChannel):
         resultReadings = ()
@@ -31,6 +34,7 @@ class MeterTracker(object):
 
         for i in xrange(startChannel, endChannel + 1):
             sourceData = dataDir + 'house_' + str(houseId) + '/channel_' + str(i) + '.dat'
+#            print "lineNum = " + str(lineNum) + "sourceData = " + sourceData
             curReading = linecache.getline(sourceData, lineNum)
             timestamp, reading = curReading.split()
 
@@ -44,8 +48,13 @@ class MeterTracker(object):
 
         return (resultTimestamp, resultReadings)
 
+    def houseSentDone(self):
+        return self.lfDone and self.hfDone
+
     def getRecord(self):
         recordIsLf = None
+
+#        print "lfDone = " + str(self.lfDone) + " hfDone = " + str(self.hfDone) + " numLfRecs " + str(self.houseConfig.numLfRecs) + " numHfRecs " + str(self.houseConfig.numHfRecs)
 
         if self.hfTimestamp is None and self.lfTimestamp is None:
             recordIsLf = True
@@ -53,26 +62,30 @@ class MeterTracker(object):
             recordIsLf = False
         elif self.lfTimestamp is None:
             recordIsLf = False
+        elif self.houseSentDone():
+            assert "ERROR!"
+        elif self.lfDone:
+            recordIsLf = False
+        elif self.hfDone:
+            recordIsLf = True
         else:
             recordIsLf = self.lfTimestamp < self.hfTimestamp
 
-        meterId = random.randint(1, len(self.meterDict))
-        if meterId not in self.sMeters:
-            self.sMeters[meterId] = 1
-
-        lineNum = self.sMeters[meterId]
-
-        if lineNum > self.fileLength:
-            lineNum = 1
-
-        self.sMeters[meterId] = lineNum + 1
-
-        if not recordIsLf:
-            startChannel = 1
-            endChannel = 2
-        else:
+        if recordIsLf:
+            lineNum = self.lfLine
+            self.lfLine += 1
             startChannel = 3
             endChannel = self.houseConfig.numMeters
+
+            if self.lfLine > self.houseConfig.numLfRecs:
+                self.lfDone = True
+        else:
+            lineNum = self.hfLine
+            self.hfLine += 1
+            startChannel = 1
+            endChannel = 2
+            if self.hfLine > self.houseConfig.numHfRecs:
+                self.hfDone = True
 
         (timestamp, readings) = self.getRecordAgg(self.houseConfig.sDataDir, 
                                                   self.houseConfig.sHouseId,
@@ -99,6 +112,8 @@ class MeterLfReader(object):
         self.tracker      = {}
         self.meterDicts   = {}
         self.houseNumRecs = {}
+
+        self.availHouse   = set(range(0, numHouse))
 
         self.initZipCodeDb(zipDbDir)
         self.initHouseConfig(dataDir)
@@ -130,19 +145,27 @@ class MeterLfReader(object):
         self.zipCodeCnt = len(self.zipCodeDb)
 
     def initHouseConfig(self, dataDir):
-        for i in xrange(1, 7):
+        for i in xrange(1, 6):
             self.meterDicts[i] = self.readLabels(dataDir, i)
-            lfData = dataDir + 'house_' + str(i) + '/channel_1.dat'
-            hfData = dataDir + 'house_' + str(i) + '/channel_3.dat'
+            hfData = dataDir + 'house_' + str(i) + '/channel_1.dat'
+            lfData = dataDir + 'house_' + str(i) + '/channel_3.dat'
             self.houseNumRecs[i] = (self.fileLen(lfData), self.fileLen(hfData))
 
+    def houseSentDone(self):
+        return len(self.availHouse) == 0
+
     def getRecord(self):
-        houseId = random.randint(0, self.numHouse - 1)
+#        houseId = random.randint(0, self.numHouse - 1)
+        if (len(self.availHouse) > 0):
+            houseId = random.sample(self.availHouse, 1)[0]
+        else:
+## TODO: Raise exception for this
+            return None
 
         if houseId not in self.tracker.keys():
-            sHouseId = random.randint(1, 6)
+            sHouseId = random.randint(1, 5)
             zipCode = self.zipCodeDb[random.randint(0, self.zipCodeCnt - 1)]
-            scaleFactor = random.random() * 1.5
+            scaleFactor = (random.random() * 2 - 1) * 0.2 + 1
             houseConfig = HouseConfig(sHouseId, 
                                       houseId, 
                                       self.dataDir, 
@@ -154,4 +177,9 @@ class MeterLfReader(object):
             meterTracker = MeterTracker(houseConfig, self.meterDicts[sHouseId])
             self.tracker[houseId] = meterTracker
 
-        return self.tracker[houseId].getRecord()
+        record = self.tracker[houseId].getRecord()
+
+        if (self.tracker[houseId].houseSentDone()):
+            self.availHouse.remove(houseId)
+
+        return record

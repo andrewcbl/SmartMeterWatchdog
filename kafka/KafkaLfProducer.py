@@ -13,20 +13,24 @@ class KafkaLfProducer(object):
 
         self.client = KafkaClient(addr)
         self.producer = KeyedProducer(self.client)
-        self.meterReader = MeterLfReader(10000,
+        self.meterReader = MeterLfReader(5,
                                          install_dir + "/data/low_freq/", 
                                          install_dir + "/" + zipdb_file)
 
     def produce_msgs(self, source_symbol):
         msg_cnt = 0
 
-        while True:
+        while not self.meterReader.houseSentDone():
             (isLf, msg) = self.meterReader.getRecord()
 
-#            if msg_cnt % 100 == 0:
-            print msg, msg_cnt, isLf
+            if msg_cnt % 100000 == 0:
+                print "Sent " + str(msg_cnt) + " messages to Kafka"
 
-#            self.producer.send_messages('smw_low_freq6', source_symbol, msg)
+            if isLf:
+                self.producer.send_messages('testing_lf', source_symbol, msg)
+            else:
+                self.producer.send_messages('testing_hf', source_symbol, msg)
+
             msg_cnt += 1
 
 if __name__ == "__main__":
