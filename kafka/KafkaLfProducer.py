@@ -28,10 +28,10 @@ class KafkaLfProducer(object):
             if msg_cnt % 100000 == 0:
                 print "Sent " + str(msg_cnt) + " messages to Kafka"
 
-#            if isLf:
-#                self.producer.send_messages('smw_batch_lf', source_symbol, msg)
-#            else:
-#                self.producer.send_messages('smw_batch_hf', source_symbol, msg)
+            if isLf:
+                self.producer.send_messages('smw_batch_lf1', source_symbol, msg)
+            else:
+                self.producer.send_messages('smw_batch_hf1', source_symbol, msg)
 
             msg_cnt += 1
 

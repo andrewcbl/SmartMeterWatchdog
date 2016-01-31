@@ -191,7 +191,6 @@ class MeterLfReader(object):
                 (sHouseId, zipCode, scaleFactor) = self.houseHist[houseId]
             else:
                 sHouseId = random.randint(1, 5)
-                sHouseId = 6
                 scaleFactor = (random.random() * 2 - 1) * 0.2 + 1
                 zipCode = self.zipCodeDb[random.randint(0, self.zipCodeCnt - 1)]
 
