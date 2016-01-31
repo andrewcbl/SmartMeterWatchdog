@@ -106,17 +106,18 @@ class MeterTracker(object):
 
 class MeterLfReader(object):
 
-    def __init__(self, numHouse, dataDir, zipDbDir):
+    def __init__(self, startHouseId, endHouseId, houseStatus, dataDir, zipDbDir):
         self.dataDir      = dataDir
-        self.numHouse     = numHouse
         self.tracker      = {}
         self.meterDicts   = {}
         self.houseNumRecs = {}
+        self.houseStatus  = houseStatus
 
-        self.availHouse   = set(range(0, numHouse))
+        self.availHouse   = set(range(startHouseId, endHouseId+1))
 
         self.initZipCodeDb(zipDbDir)
         self.initHouseConfig(dataDir)
+        self.houseHist    = self.readHouseStatus(houseStatus)
 
     def fileLen(self, fname):
         p = subprocess.Popen(['wc', '-l', fname], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -138,6 +139,26 @@ class MeterLfReader(object):
 
         return meterDict
 
+    def readHouseStatus(self, houseStatus):
+        houseFh = open(houseStatus).readlines()
+
+        houseHist = {}
+
+        for line in houseFh:
+            (houseId, sHouseId, zipCode, scaleFactor) = line.split()
+            houseHist[int(houseId)] = (int(sHouseId), zipCode, float(scaleFactor))
+
+        return houseHist
+
+    def writeHouseStatus(self):
+        houseFh = open(self.houseStatus + ".new", 'w')
+
+        for houseId in self.houseHist.keys():
+            rec = self.houseHist[houseId]
+            houseFh.write("%s %s %s %s\n" % (houseId, rec[0], rec[1], rec[2]))
+
+        houseFh.close()
+
     def initZipCodeDb(self, zipDbDir):
         df = pd.read_csv(zipDbDir, dtype={'zip': object})
 
@@ -145,7 +166,7 @@ class MeterLfReader(object):
         self.zipCodeCnt = len(self.zipCodeDb)
 
     def initHouseConfig(self, dataDir):
-        for i in xrange(1, 6):
+        for i in xrange(1, 7):
             self.meterDicts[i] = self.readLabels(dataDir, i)
             hfData = dataDir + 'house_' + str(i) + '/channel_1.dat'
             lfData = dataDir + 'house_' + str(i) + '/channel_3.dat'
@@ -155,7 +176,6 @@ class MeterLfReader(object):
         return len(self.availHouse) == 0
 
     def getRecord(self):
-#        houseId = random.randint(0, self.numHouse - 1)
         if (len(self.availHouse) > 0):
             houseId = random.sample(self.availHouse, 1)[0]
         else:
@@ -163,9 +183,19 @@ class MeterLfReader(object):
             return None
 
         if houseId not in self.tracker.keys():
-            sHouseId = random.randint(1, 5)
-            zipCode = self.zipCodeDb[random.randint(0, self.zipCodeCnt - 1)]
-            scaleFactor = (random.random() * 2 - 1) * 0.2 + 1
+            sHouseId = None
+            scaleFactor = None
+            zipCode = None
+
+            if houseId in self.houseHist.keys():
+                (sHouseId, zipCode, scaleFactor) = self.houseHist[houseId]
+            else:
+                sHouseId = random.randint(1, 5)
+                sHouseId = 6
+                scaleFactor = (random.random() * 2 - 1) * 0.2 + 1
+                zipCode = self.zipCodeDb[random.randint(0, self.zipCodeCnt - 1)]
+
+                self.houseHist[houseId] = (sHouseId, zipCode, scaleFactor)
             houseConfig = HouseConfig(sHouseId, 
                                       houseId, 
                                       self.dataDir, 
