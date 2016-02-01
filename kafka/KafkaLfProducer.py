@@ -12,7 +12,7 @@ class KafkaLfProducer(object):
         zipdb_file = self.parser.get('smw_tool', 'ZIP_DB_FILE') 
 
         self.client = KafkaClient(addr)
-        self.producer = KeyedProducer(self.client)
+        self.producer = KeyedProducer(self.client, async=True)
         self.meterReader = MeterLfReader(start_house_id,
                                          end_house_id,
                                          house_status,
@@ -25,16 +25,17 @@ class KafkaLfProducer(object):
         while not self.meterReader.houseSentDone():
             (isLf, msg) = self.meterReader.getRecord()
 
-            if msg_cnt % 100000 == 0:
+            if msg_cnt % 500000 == 0:
                 print "Sent " + str(msg_cnt) + " messages to Kafka"
 
             if isLf:
-                self.producer.send_messages('smw_batch_lf4', source_symbol, msg)
+                self.producer.send_messages('smw_batch_lf', source_symbol, msg)
             else:
-                self.producer.send_messages('smw_batch_hf4', source_symbol, msg)
+                self.producer.send_messages('smw_batch_hf', source_symbol, msg)
 
             msg_cnt += 1
 
+        print "Sent Total " + str(msg_cnt) + " messages to Kafka"
         self.meterReader.writeHouseStatus()
 
 if __name__ == "__main__":

@@ -166,7 +166,7 @@ class MeterLfReader(object):
         self.zipCodeCnt = len(self.zipCodeDb)
 
     def initHouseConfig(self, dataDir):
-        for i in xrange(1, 7):
+        for i in xrange(1, 6):
             self.meterDicts[i] = self.readLabels(dataDir, i)
             hfData = dataDir + 'house_' + str(i) + '/channel_1.dat'
             lfData = dataDir + 'house_' + str(i) + '/channel_3.dat'
