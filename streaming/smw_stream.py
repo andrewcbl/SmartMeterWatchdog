@@ -42,7 +42,7 @@ def ts2date(curTime):
 
 def process(rdd):
     sqlContext = getSqlContextInstance(rdd.context)
-    rdd_date = rdd.map(lambda w: Row(houseId=str(json.loads(w)["houseId"]), date=str(ts2date(json.loads(w)['timestamp'])), zip=str(json.loads(w)["zip"]), power=str(json.loads(w)["power"])))
+    rdd_date = rdd.map(lambda w: Row(houseId=str(json.loads(w)["houseId"]), date=str(ts2date(json.loads(w)['timestamp'])), zip=str(json.loads(w)["zip"]), power=str(float(json.loads(w)["readings"][0]['power']) + float(json.loads(w)["readings"][1]['power']))))
     rdd_aggr = rdd_date.map(lambda x: ((x.houseId, x.date, x.zip), x.power)).reduceByKey(lambda x, y: float(x)+float(y))
     house_clean = rdd_aggr.map(lambda x: {
         "houseId": x[0][0],
@@ -60,11 +60,18 @@ def updateRecord(rec):
     except RqlDriverError:
         abort(503, "No database connection could be established.")
 
-    r.table("power_rt1").insert([{
-        "houseId:": str(rec[0]),
-        "date:": str(rec[1]),
-        "zip:": str(rec[2]),
-        "power": str(rec[3])
+#    rec = json.dumps({'housid:': str(rec[0]),
+#                      'date:': str(rec[1]),
+#                      'zip:': str(rec[2]),
+#                      'power:': str(rec[3])})
+#
+#    r.table('power_aggr_rt').insert(rec).run()
+
+    r.table("power_aggr_rt").insert([{
+        "houseid:": str(rec[1]),
+        "date:": str(rec[0]),
+        "zip:": str(rec[3]),
+        "power": str(rec[2])
     }]).run(conn)
 
     conn.close()
@@ -85,10 +92,10 @@ def aggToCassandra(agg):
 
 # connectRethinkDb()
 
-kafkaStream = KafkaUtils.createStream(ssc, kafka_dns + ":" + kafka_port, "smw_streaming", {"smw_low_freq8": 1})
-power_rt = kafkaStream.map(lambda rec: rec[1])
+kafkaStreamHf = KafkaUtils.createStream(ssc, kafka_dns + ":" + kafka_port, "smw_streaming", {"testing_streaming_hf": 1})
+power_rt_hf = kafkaStreamHf.map(lambda rec: rec[1])
 
-power_rt.foreachRDD(process)
+power_rt_hf.foreachRDD(process)
 
 ssc.start()
 ssc.awaitTermination()
