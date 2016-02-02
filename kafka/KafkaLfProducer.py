@@ -12,7 +12,7 @@ class KafkaLfProducer(object):
         zipdb_file = self.parser.get('smw_tool', 'ZIP_DB_FILE') 
 
         self.client = KafkaClient(addr)
-        self.producer = KeyedProducer(self.client, async=True)
+        self.producer = KeyedProducer(self.client, async=True, batch_send_every_n=500,batch_send=True)
         self.meterReader = MeterLfReader(start_house_id,
                                          end_house_id,
                                          house_status,
@@ -29,9 +29,9 @@ class KafkaLfProducer(object):
                 print "Sent " + str(msg_cnt) + " messages to Kafka"
 
             if isLf:
-                self.producer.send_messages('smw_batch_lf', source_symbol, msg)
+                self.producer.send_messages('smw_batch_lf2', source_symbol, msg)
             else:
-                self.producer.send_messages('smw_batch_hf', source_symbol, msg)
+                self.producer.send_messages('smw_batch_hf2', source_symbol, msg)
 
             msg_cnt += 1
 
