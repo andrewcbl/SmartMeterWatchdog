@@ -22,7 +22,7 @@ rdb_dns    = "ec2-52-89-146-18.us-west-2.compute.amazonaws.com"
 rdb_port   = 28015
 
 # Kafka streaming connection parameters
-kafka_dns  = "ec2-52-35-74-206.us-west-2.compute.amazonaws.com"
+kafka_dns  = "ec2-52-35-196-134.us-west-2.compute.amazonaws.com"
 kafka_port = "2181"
 
 sc = SparkContext(appName="StreamingKafkaLowFrequency")
