@@ -120,6 +120,9 @@ def processHDFS(hostDir, fileDir, isLf):
 highFreqEnergyNorm = processHDFS(HDFS_DIR, CAMUS_HF, False)
 lowFreqEnergyNorm  = processHDFS(HDFS_DIR, CAMUS_LF, True)
 
+highFreqEnergyNorm.cache()
+lowFreqEnergyNorm.cache()
+
 lowFreqPercent = (lowFreqEnergyNorm.map(lambda rec: reordRec(rec)) \
                  .leftOuterJoin(highFreqEnergyNorm.map(lambda rec: reordRec(rec)))) \
                  .map(lambda rec: getPercentage(rec))
