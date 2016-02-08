@@ -37,8 +37,10 @@ def getSqlContextInstance(sparkContext):
         globals()['sqlContextSingletonInstance'] = SQLContext(sparkContext)
     return globals()['sqlContextSingletonInstance']
 
+# Functions to support HDFS processing
+# TODO: Looks spark.sql already have similar function. Investigate
 def ts2date(curTime):
-    return time.strftime("%D", time.localtime(int(curTime)))
+    return time.strftime("%Y-%m-%d", time.localtime(int(curTime)))
 
 def process(rdd):
     sqlContext = getSqlContextInstance(rdd.context)
