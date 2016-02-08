@@ -3,30 +3,52 @@ from pyspark import SparkConf
 from pyspark import StorageLevel
 from pyspark.sql import SQLContext, Row
 from pyspark.sql.types import *
+from pyspark.sql import HiveContext
 from cassandra.cluster import Cluster
 import time
 
 # Setup the the Spark cluster and Cassandra driver
 cluster = Cluster()
-conf = SparkConf().setAppName("Smart Meter Watchdog")
+conf = SparkConf().setAppName("Smarter Meter Online")
+conf.set('spark.rdd.compress', 'True')
 sc = SparkContext(conf=conf)
 sqlContext = SQLContext(sc)
+hiveContext = HiveContext(sc)
 
 # HDFS Constants 
-HDFS_DIR = "ec2-52-34-246-104.us-west-2.compute.amazonaws.com:9000"
-CAMUS_HF = "/camus/topics/house_hf/hourly/2016/02/02/*"
-CAMUS_LF = "/camus/topics/house_lf/hourly/2016/02/02/*"
-#HDFS_DIR = "ec2-52-89-146-18.us-west-2.compute.amazonaws.com:9000/"
-#CAMUS_HF = "/camus/topics/testing_hf/hourly/2016/01/31/14"
-#CAMUS_LF = "/camus/topics/testing_lf/hourly/2016/01/31/14"
+HDFS_DIR = "ec2-54-148-53-88.us-west-2.compute.amazonaws.com:9000"
+# 50GB dataset
+#CAMUS_HF = "/camus/topics/testing_hf1/hourly/2016/02/*/*"
+#CAMUS_LF = "/camus/topics/testing_lf1/hourly/2016/02/*/*"
+# 200GB dataset
+CAMUS_HF = "/camus/topics/house_hf2/hourly/2016/02/*/*"
+CAMUS_LF = "/camus/topics/house_lf2/hourly/2016/02/*/*"
+# 10GB dataset
+#CAMUS_HF = "/camus/topics/testing_hf0/hourly/2016/02/*/*"
+#CAMUS_LF = "/camus/topics/testing_lf0/hourly/2016/02/*/*"
+# Newer 10GB dataset
+#CAMUS_HF = "/camus/topics/testing_hf2/hourly/2016/02/*/*"
+#CAMUS_LF = "/camus/topics/testing_lf2/hourly/2016/02/*/*"
 
 # Cassandra constants
-CASSANDRA_CLUSTER   = ['52.89.146.18', '52.89.197.150', '52.89.235.220', '52.89.249.32']
-CASSANDRA_DB        = 'playground'
-CASSANDRA_HF_TABLE  = 'batch_power_main'
-CASSANDRA_LF_TABLE  = 'batch_power_appliance'
-CASSANDRA_PCT_TABLE = 'batch_power_percent'
-CASSANDRA_GEO_TABLE = 'batch_power_geographical'
+CASSANDRA_CLUSTER    = ['52.89.107.2', '54.149.167.208', '52.89.115.218', '54.149.95.1']
+CASSANDRA_DB         = 'playground'
+CASSANDRA_HF_TABLE   = 'batch_power_main2001'
+CASSANDRA_LF_TABLE   = 'batch_power_appliance2001'
+CASSANDRA_PCT_TABLE  = 'batch_power_percent2001'
+CASSANDRA_GEO_TABLE  = 'batch_power_geographical2001'
+CASSANDRA_STAT_TABLE = 'batch_power_stat2001'
+
+JSON_SCHEMA = StructType([
+    StructField("timestamp", StringType(), True),
+    StructField("houseId", LongType(), True),
+    StructField("zip", StringType(), True),
+    StructField("readings", ArrayType(StructType([
+        StructField("meterId", StringType(), True),
+        StructField("power", StringType(), True),
+        StructField("label", StringType(), True)
+    ])), True)
+])
 
 # Functions to support HDFS processing
 # TODO: Looks spark.sql already have similar function. Investigate
@@ -78,6 +100,16 @@ def writeGeoTableToCassandra(agg, tablename):
         casSession.shutdown()
         cascluster.shutdown()
 
+def writeStatTableToCassandra(agg, tablename):
+    if agg:
+        cascluster = Cluster(CASSANDRA_CLUSTER)
+        casSession = cascluster.connect('playground')
+        casCommand = ('INSERT INTO %s (houseid, meterid, percentile) VALUES ' % (tablename)) + '(%s, %s, %s)'
+        for rec in agg:
+            casSession.execute(casCommand, (str(rec[0]), str(rec[1]), str(rec[2][0])))
+        casSession.shutdown()
+        cascluster.shutdown()
+
 def j2kwh(energy):
     return energy * 1.0 / 1000 / 3600
 
@@ -86,18 +118,28 @@ def reordRec(rec):
     return ((rec[0][0], rec[0][2], rec[0][3]), (rec[0][1], rec[1]))
 
 def getPercentage(rec):
-    if rec[1][1][1] < 1e-5:
+    if rec is None or rec[1][1][1] < 1e-5:
         percentage = 0.0
     else:
         percentage = rec[1][0][1] * 1.0 / rec[1][1][1]
     return (rec[0][0], rec[1][0][0], rec[0][1], rec[0][2], percentage * 100)
 
+def runHiveStats(rdd):
+    rddFilt = rdd.filter(rdd.power > 1e-5)
+    hiveContext.registerDataFrameAsTable(rddFilt, "rddTab")
+    stats = hiveContext.sql('select houseId,meterId, percentile_approx(power, array(0.97)) from rddTab GROUP BY houseId, meterId')
+    stats.foreachPartition(lambda par: writeStatTableToCassandra(par, CASSANDRA_STAT_TABLE))
+
 def processHDFS(hostDir, fileDir, isLf):
-#    sourceDf    = sqlContext.read.json("hdfs://" + hostDir + fileDir).repartition(72)
-    sourceDf    = sqlContext.read.json("hdfs://" + hostDir + fileDir)
+#    sourceDf    = sqlContext.read.json("hdfs://" + hostDir + fileDir, JSON_SCHEMA).repartition(4096)
+    sourceDf    = sqlContext.read.json("hdfs://" + hostDir + fileDir, JSON_SCHEMA).repartition(4096)
     sourceDfExp = sqlContext.createDataFrame(
         sourceDf.flatMap(lambda row: expandRec(row)), ['houseId', 'date', 'timestamp', 'zip', 'label', 'meterId', 'power']
     )
+
+    sourceDfExp.persist(StorageLevel.MEMORY_AND_DISK)
+
+    runHiveStats(sourceDfExp)
 
     # key is (houseid, meterid, zip, date)
     # value is list of (timestamp, label, power)
@@ -132,5 +174,5 @@ zipTotalPower = highFreqEnergyNorm.map(lambda rec: ((rec[0][2], rec[0][3]), rec[
 
 lowFreqEnergyNorm.foreachPartition(lambda par: writeTotalTableToCassandra(par, CASSANDRA_LF_TABLE))
 highFreqEnergyNorm.foreachPartition(lambda par: writeTotalTableToCassandra(par, CASSANDRA_HF_TABLE))
-lowFreqPercent.foreachPartition(lambda par: writePercentTableToCassandra(par, CASSANDRA_PCT_TABLE))
 zipTotalPower.foreachPartition(lambda par: writeGeoTableToCassandra(par, CASSANDRA_GEO_TABLE))
+lowFreqPercent.foreachPartition(lambda par: writePercentTableToCassandra(par, CASSANDRA_PCT_TABLE))
