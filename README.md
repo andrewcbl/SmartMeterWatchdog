@@ -59,3 +59,31 @@ The schema to serve the home appliance energy study is in the following figure:
 ![cassandra_appliance](images/CassandraSchemaApp.png)
 
 This table has (houseid, date) as composite partition key so that all the appliance energy for each house and date will be on the same Cassandra node to improve read performance
+
+## Usage:
+
+### Data cleaning (This would remove unclean timestamps from all the readings):
+cd utils
+python FindCleanDays.py /home/ubuntu/project/SmartMeterWatchdog/data/low_freq/house_1 "04/19/2011:00:00:00"
+
+### Generate 30 day reading data as raw source:
+cd utils
+python generateData.py ../data/low_freq/house_1 20
+
+The previous two steps can also be run as following:
+cd utils
+./genall.sh
+
+### Batch layer:
+To run batch layer job:
+cd batch
+spark-submit --master spark://<SPARK_IP>:7077 --executor-memory 14000M --driver-memory 14000M batch.py
+
+### Real time layer:
+To run real time layer job:
+cd streaming
+park-submit --packages org.apache.spark:spark-streaming-kafka_2.10:1.5.1 --master spark://<SPARK_IP>:7077 smw_stream.py "<AWS_DNS>:9092"
+
+### To run Kafka producer:
+cd kafka
+python KafkaLfProducer.py /home/ubuntu/project/SmartMeterWatchdog/config/smw.cfg <kafka public ip> 0 <startHouseId> <endHouseId> houseStatus
