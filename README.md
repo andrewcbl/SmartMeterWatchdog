@@ -28,7 +28,10 @@ The data processing pipeline in batch layer is shown in the following figure:
 ![batch_data_processing](images/BatchProcessing.png)
 
 The energy consumption calculation follows the following equation:
+
 ![energy_calculation](images/EnergyConsumption.png)
+
+In the data processing pipeline, Spark first expand the compact JSON into records (~20 meters in one JSON records to ~20 JSON records). Then aggregate the records by houseId, meterId and Date. For each aggregation, it sorts the timestamp and compute the timestamp difference in adjacent records, them multiply the power reading. All the results are summed up to get energy consumption for a single house/meter/date. The appliance energy calculation are joined with main energy calculation to generate % for each appliance type.
 
 The data processing pipeline in real time layer is shown in the following figure:
 ![rt_data_processing](images/RealTimeProcessing.png)
@@ -38,14 +41,21 @@ The data processing pipeline in real time layer is shown in the following figure
 The source data schema is shown in the following figure:
 ![JSON_SCHEMA](images/JSONSchema.png)
 
+The readings from all the appliance meters (~20 for each house) are encoded into 1 JSON file so that records could be pushed to Kafka faster. This would be expanded in Spark in both the batch layer and real time layer.
+
 The Cassandra database has three schemas for different purpose:
 
 The schema to serve the geographical study is in the following figure:
 ![cassandra_geo](images/CassandraSchemaZip.png)
 
+This table has date as partition key and zip as clustering key so that each zip for each date will have one overall reading. And data from one date will be on the same Cassandra node to improve read performance.
+
 The schema to serve the home historical energy consumption study is in the following figure:
 ![cassandra_historical](images/CassandraSchemaMain.png)
+
+This table has houseid as the partition key and date as the clustering key. The schema is designed in a way that for each house, energy consumption from all dates would be on the same node to improve read performance
 
 The schema to serve the home appliance energy study is in the following figure:
 ![cassandra_appliance](images/CassandraSchemaApp.png)
 
+This table has (houseid, date) as composite partition key so that all the appliance energy for each house and date will be on the same Cassandra node to improve read performance
