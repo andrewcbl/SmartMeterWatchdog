@@ -16,4 +16,36 @@ The data pipeline is shown as the following figure:
 
 ![data_pipeline](images/data_pipeline.png)
 
-I choose Kafka because it is fault tolerant and is able to buffer the data for some time and can support different types of consumers. Camus is used as the tool to read the data from Kafka and write to HDFS. The data processing part contains two portions, one is the batch layer processing, which contains computing the daily energy consumption for each appliance as well as the main power. It also uses hivecontext to compute the 97% percentile for each meter and use in the real time layer. 
+I choose Kafka because it is fault tolerant and is able to buffer the data for some time and can support different types of consumers. Camus is used as the tool to read the data from Kafka and write to HDFS. 
+
+The data processing part contains two portions, one is the batch layer processing, which contains computing the daily energy consumption for each appliance as well as the main power. The data processing pipeline is implemented in Spark (pyspark). It also uses hivecontext to compute the 97% percentile for each meter and use in the real time layer. The results from Spark processing are written to Cassandra database to serve the Flask UI.
+
+The real time layer is processed in Spark Streaming, it reads in the statistics data from Cassandra, and filter the streaming power from all appliances , then add some threshold to determine if there is any power overshoot (sudden excessive power reading). It generates alerts if there are power overshoot and write the records into rethinkDb and push to Flask UI
+
+## Data Processing
+
+The data processing pipeline in batch layer is shown in the following figure:
+![batch_data_processing](images/BatchProcessing.png)
+
+The energy consumption calculation follows the following equation:
+![energy_calculation](images/EnergyConsumption.png)
+
+The data processing pipeline in real time layer is shown in the following figure:
+![rt_data_processing](images/RealTimeProcessing.png)
+
+## Schemas
+
+The source data schema is shown in the following figure:
+![JSON_SCHEMA](images/JSONSchema.png)
+
+The Cassandra database has three schemas for different purpose:
+
+The schema to serve the geographical study is in the following figure:
+![cassandra_geo](images/CassandraSchemaZip.png)
+
+The schema to serve the home historical energy consumption study is in the following figure:
+![cassandra_historical](images/CassandraSchemaMain.png)
+
+The schema to serve the home appliance energy study is in the following figure:
+![cassandra_appliance](images/CassandraSchemaApp.png)
+
