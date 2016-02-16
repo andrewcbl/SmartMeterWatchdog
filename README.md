@@ -1,5 +1,4 @@
 # Smart Meter Watchdog project in Insight Data Engineer program
-(ongoing)
 
 ## Introduction
 Smarter Meter Online is a "hypothetical" system to monitor home energy consumption. The idea of the project is to attach power sensor to all the major appliances around the home, and the system can monitor/alert energy consumption in details. It takes in real time data feeding (engineered), and builds data pipeline to generate home energy usage dashboard and detailed appliance energy usage. In addition, it also detects sudden spike in the power reading from any meter.
@@ -64,26 +63,34 @@ This table has (houseid, date) as composite partition key so that all the applia
 
 ### Data cleaning (This would remove unclean timestamps from all the readings):
 cd utils
+
 python FindCleanDays.py /home/ubuntu/project/SmartMeterWatchdog/data/low_freq/house_1 "04/19/2011:00:00:00"
 
 ### Generate 30 day reading data as raw source:
 cd utils
+
 python generateData.py ../data/low_freq/house_1 20
 
 The previous two steps can also be run as following:
 cd utils
+
 ./genall.sh
 
 ### Batch layer:
 To run batch layer job:
+
 cd batch
+
 spark-submit --master spark://<SPARK_IP>:7077 --executor-memory 14000M --driver-memory 14000M batch.py
 
 ### Real time layer:
 To run real time layer job:
+
 cd streaming
+
 park-submit --packages org.apache.spark:spark-streaming-kafka_2.10:1.5.1 --master spark://<SPARK_IP>:7077 smw_stream.py "<AWS_DNS>:9092"
 
 ### To run Kafka producer:
 cd kafka
+
 python KafkaLfProducer.py /home/ubuntu/project/SmartMeterWatchdog/config/smw.cfg <kafka public ip> 0 <startHouseId> <endHouseId> houseStatus
